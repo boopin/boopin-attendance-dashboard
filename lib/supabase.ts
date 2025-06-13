@@ -79,7 +79,7 @@ export const commonQueries = {
       .select('*')
       .eq('date', date)
       .order('check_in', { ascending: true, nullsFirst: false }),
-  
+
   // Get active employees
   getActiveEmployees: () =>
     createQuery.employees()
