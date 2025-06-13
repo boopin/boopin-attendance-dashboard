@@ -23,10 +23,11 @@ export const useAttendanceData = (): UseAttendanceDataReturn => {
     clearError();
 
     const { data, error: loadError } = await handleAsyncOperation(
-      Promise.resolve(commonQueries.getRecentDailySummaries(limit)).then(response => {
+      (async () => {
+        const response = await commonQueries.getRecentDailySummaries(limit);
         if (response.error) throw response.error;
         return response.data;
-      }),
+      })(),
       'Failed to load daily summaries'
     );
 
@@ -47,10 +48,11 @@ export const useAttendanceData = (): UseAttendanceDataReturn => {
     clearError();
 
     const { data, error: loadError } = await handleAsyncOperation(
-      Promise.resolve(commonQueries.getRecentWeeklySummaries(limit)).then(response => {
+      (async () => {
+        const response = await commonQueries.getRecentWeeklySummaries(limit);
         if (response.error) throw response.error;
         return response.data;
-      }),
+      })(),
       'Failed to load weekly summaries'
     );
 
@@ -73,17 +75,19 @@ export const useAttendanceData = (): UseAttendanceDataReturn => {
     try {
       const [dailyResult, weeklyResult] = await Promise.all([
         handleAsyncOperation(
-          Promise.resolve(commonQueries.getRecentDailySummaries()).then(response => {
+          (async () => {
+            const response = await commonQueries.getRecentDailySummaries();
             if (response.error) throw response.error;
             return response.data;
-          }),
+          })(),
           'Failed to load daily summaries'
         ),
         handleAsyncOperation(
-          Promise.resolve(commonQueries.getRecentWeeklySummaries()).then(response => {
+          (async () => {
+            const response = await commonQueries.getRecentWeeklySummaries();
             if (response.error) throw response.error;
             return response.data;
-          }),
+          })(),
           'Failed to load weekly summaries'
         )
       ]);
