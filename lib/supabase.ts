@@ -78,7 +78,7 @@ export const commonQueries = {
     createQuery.employeeRecords()
       .select('*')
       .eq('date', date)
-      .order('check_in', { ascending: true, nullsLast: true }),
+      .order('check_in', { ascending: true, nullsFirst: false }),
 
   // Get active employees
   getActiveEmployees: () =>
