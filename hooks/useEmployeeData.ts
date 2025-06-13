@@ -24,10 +24,11 @@ export const useEmployeeData = (): UseEmployeeDataReturn => {
     clearError();
 
     const { data, error: loadError } = await handleAsyncOperation(
-      commonQueries.getActiveEmployees().then(response => {
+      (async () => {
+        const response = await commonQueries.getActiveEmployees();
         if (response.error) throw response.error;
         return response.data;
-      }),
+      })(),
       'Failed to load employees'
     );
 
@@ -48,10 +49,11 @@ export const useEmployeeData = (): UseEmployeeDataReturn => {
     clearError();
 
     const { data, error: loadError } = await handleAsyncOperation(
-      commonQueries.getEmployeeRecordsByDate(date).then(response => {
+      (async () => {
+        const response = await commonQueries.getEmployeeRecordsByDate(date);
         if (response.error) throw response.error;
         return response.data;
-      }),
+      })(),
       'Failed to load employee records'
     );
 
@@ -75,10 +77,11 @@ export const useEmployeeData = (): UseEmployeeDataReturn => {
       const { startDate, endDate } = getMonthDateRange(month);
       
       const { data, error: loadError } = await handleAsyncOperation(
-        commonQueries.getEmployeeMonthlyData(empCode, startDate, endDate).then(response => {
+        (async () => {
+          const response = await commonQueries.getEmployeeMonthlyData(empCode, startDate, endDate);
           if (response.error) throw response.error;
           return response.data;
-        }),
+        })(),
         'Failed to load monthly employee data'
       );
 
@@ -105,10 +108,11 @@ export const useEmployeeData = (): UseEmployeeDataReturn => {
     clearError();
 
     const { data, error: loadError } = await handleAsyncOperation(
-      commonQueries.getWeeklyEmployeeData(weekStart, weekEnd).then(response => {
+      (async () => {
+        const response = await commonQueries.getWeeklyEmployeeData(weekStart, weekEnd);
         if (response.error) throw response.error;
         return response.data;
-      }),
+      })(),
       'Failed to load weekly employee data'
     );
 
