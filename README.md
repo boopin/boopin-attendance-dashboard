@@ -2,8 +2,6 @@
 
 A professional, real-time employee attendance tracking and analytics dashboard built with Next.js, TypeScript, and Supabase.
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/YOUR_USERNAME/boopin-attendance-dashboard-v2)
-
 ## ✨ Features
 
 ### 📊 **Real-Time Analytics**
@@ -45,8 +43,8 @@ A professional, real-time employee attendance tracking and analytics dashboard b
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/YOUR_USERNAME/boopin-attendance-dashboard-v2.git
-   cd boopin-attendance-dashboard-v2
+   git clone https://github.com/boopin/boopin-attendance-dashboard.git
+   cd boopin-attendance-dashboard
    ```
 
 2. **Install dependencies**
