@@ -1,11 +1,12 @@
 // hooks/useEmployeeData.ts
-// 👥 Custom hook for managing employee data and records
+// 👥 Custom hook for managing employee data and records - FIXED VERSION
 
 import { useState, useCallback } from 'react';
 import type { Employee, EmployeeRecord, UseEmployeeDataReturn } from '../lib/types';
-import { commonQueries, handleSupabaseError } from '../lib/supabase';
+import { handleSupabaseError } from '../lib/supabase';
 import { handleAsyncOperation, groupBy } from '../lib/utils';
 import { getMonthDateRange } from '../lib/formatters';
+import { supabase } from '../lib/supabase'; // Direct import
 
 export const useEmployeeData = (): UseEmployeeDataReturn => {
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -23,49 +24,70 @@ export const useEmployeeData = (): UseEmployeeDataReturn => {
     setLoading(true);
     clearError();
 
-    const { data, error: loadError } = await handleAsyncOperation(
-      (async () => {
-        const response = await commonQueries.getActiveEmployees();
-        if (response.error) throw response.error;
-        return response.data;
-      })(),
-      'Failed to load employees'
-    );
+    try {
+      // Get unique employees from daily_employee_records
+      const { data, error: loadError } = await supabase
+        .from('daily_employee_records')
+        .select('emp_code, name')
+        .order('emp_code');
 
-    if (loadError) {
-      setError(handleSupabaseError(loadError, 'Employee Loading'));
+      if (loadError) throw loadError;
+
+      // Remove duplicates and create employee objects
+      const uniqueEmployees = Array.from(
+        new Map(data?.map(emp => [emp.emp_code, emp]) || []).values()
+      ).map(emp => ({
+        emp_code: emp.emp_code,
+        name: emp.name
+      }));
+
+      setEmployees(uniqueEmployees);
+      setLoading(false);
+      return { data: uniqueEmployees, error: null };
+
+    } catch (err: any) {
+      const errorMsg = handleSupabaseError(err, 'Employee Loading');
+      setError(errorMsg);
       setEmployees([]);
-    } else {
-      setEmployees(data || []);
+      setLoading(false);
+      return { data: null, error: errorMsg };
     }
-
-    setLoading(false);
-    return { data, error: loadError };
   }, [clearError]);
 
-  // Load employee records for a specific date
+  // Load employee records for a specific date - FIXED VERSION
   const loadEmployeeData = useCallback(async (date: string) => {
     setLoading(true);
     clearError();
 
-    const { data, error: loadError } = await handleAsyncOperation(
-      (async () => {
-        const response = await commonQueries.getEmployeeRecordsByDate(date);
-        if (response.error) throw response.error;
-        return response.data;
-      })(),
-      'Failed to load employee records'
-    );
+    try {
+      console.log(`🔍 Loading employee records for date: ${date}`);
 
-    if (loadError) {
-      setError(handleSupabaseError(loadError, 'Employee Records Loading'));
-      setEmployeeRecords([]);
-    } else {
+      // Direct Supabase query - exactly what the test script showed works
+      const { data, error: loadError } = await supabase
+        .from('daily_employee_records')
+        .select('emp_code, name, date, check_in, check_out, work_hours, time_category, status, total_punches')
+        .eq('date', date)
+        .order('check_in', { ascending: true });
+
+      if (loadError) {
+        console.error('❌ Supabase error:', loadError);
+        throw loadError;
+      }
+
+      console.log(`✅ Found ${data?.length || 0} employee records for ${date}`);
+
       setEmployeeRecords(data || []);
-    }
+      setLoading(false);
+      return { data: data || [], error: null };
 
-    setLoading(false);
-    return { data, error: loadError };
+    } catch (err: any) {
+      console.error('❌ Error in loadEmployeeData:', err);
+      const errorMsg = handleSupabaseError(err, 'Employee Records Loading');
+      setError(errorMsg);
+      setEmployeeRecords([]);
+      setLoading(false);
+      return { data: null, error: errorMsg };
+    }
   }, [clearError]);
 
   // Load monthly data for a specific employee
@@ -76,27 +98,24 @@ export const useEmployeeData = (): UseEmployeeDataReturn => {
     try {
       const { startDate, endDate } = getMonthDateRange(month);
       
-      const { data, error: loadError } = await handleAsyncOperation(
-        (async () => {
-          const response = await commonQueries.getEmployeeMonthlyData(empCode, startDate, endDate);
-          if (response.error) throw response.error;
-          return response.data;
-        })(),
-        'Failed to load monthly employee data'
-      );
+      const { data, error: loadError } = await supabase
+        .from('daily_employee_records')
+        .select('*')
+        .eq('emp_code', empCode)
+        .gte('date', startDate)
+        .lte('date', endDate)
+        .order('date', { ascending: true });
 
-      if (loadError) {
-        setError(handleSupabaseError(loadError, 'Monthly Employee Data Loading'));
-        setEmployeeRecords([]);
-      } else {
-        setEmployeeRecords(data || []);
-      }
+      if (loadError) throw loadError;
 
+      setEmployeeRecords(data || []);
       setLoading(false);
-      return { data, error: loadError };
+      return { data: data || [], error: null };
+
     } catch (err: any) {
       const errorMsg = handleSupabaseError(err, 'Monthly Employee Data Loading');
       setError(errorMsg);
+      setEmployeeRecords([]);
       setLoading(false);
       return { data: null, error: errorMsg };
     }
@@ -107,72 +126,76 @@ export const useEmployeeData = (): UseEmployeeDataReturn => {
     setLoading(true);
     clearError();
 
-    const { data, error: loadError } = await handleAsyncOperation(
-      (async () => {
-        const response = await commonQueries.getWeeklyEmployeeData(weekStart, weekEnd);
-        if (response.error) throw response.error;
-        return response.data;
-      })(),
-      'Failed to load weekly employee data'
-    );
+    try {
+      const { data, error: loadError } = await supabase
+        .from('daily_employee_records')
+        .select('*')
+        .gte('date', weekStart)
+        .lte('date', weekEnd)
+        .order('emp_code')
+        .order('date');
 
-    if (loadError) {
-      setError(handleSupabaseError(loadError, 'Weekly Employee Data Loading'));
-      return { data: [], error: loadError };
-    }
+      if (loadError) throw loadError;
 
-    // Process data into WeeklyEmployeeData format
-    const employeeMap = new Map<string, any>();
-    
-    data?.forEach(record => {
-      if (!employeeMap.has(record.emp_code)) {
-        employeeMap.set(record.emp_code, {
-          emp_code: record.emp_code,
-          name: record.name,
-          days: [],
-          totalDays: 0,
-          presentDays: 0,
-          leaveDays: 0,
-          totalHours: 0,
-          onTimeDays: 0,
-          lateDays: 0,
-          dailyBreakdown: {}
-        });
-      }
-
-      const employee = employeeMap.get(record.emp_code)!;
-      employee.days.push(record);
-      employee.totalDays++;
+      // Process data into WeeklyEmployeeData format
+      const employeeMap = new Map<string, any>();
       
-      // Store daily details by date
-      employee.dailyBreakdown[record.date] = {
-        date: record.date,
-        check_in: record.check_in,
-        check_out: record.check_out,
-        work_hours: record.work_hours,
-        status: record.status,
-        time_category: record.time_category
-      };
-      
-      if (record.status === 'Present') {
-        employee.presentDays++;
-        employee.totalHours += record.work_hours || 0;
-        
-        if (['On Time', 'On-time Check-in', 'Early Check-in'].includes(record.time_category)) {
-          employee.onTimeDays++;
-        } else if (['Late Check-in', 'Late'].includes(record.time_category)) {
-          employee.lateDays++;
+      data?.forEach(record => {
+        if (!employeeMap.has(record.emp_code)) {
+          employeeMap.set(record.emp_code, {
+            emp_code: record.emp_code,
+            name: record.name,
+            days: [],
+            totalDays: 0,
+            presentDays: 0,
+            leaveDays: 0,
+            totalHours: 0,
+            onTimeDays: 0,
+            lateDays: 0,
+            dailyBreakdown: {}
+          });
         }
-      } else {
-        employee.leaveDays++;
-      }
-    });
 
-    const processedData = Array.from(employeeMap.values())
-      .sort((a, b) => a.name.localeCompare(b.name));
+        const employee = employeeMap.get(record.emp_code)!;
+        employee.days.push(record);
+        employee.totalDays++;
+        
+        // Store daily details by date
+        employee.dailyBreakdown[record.date] = {
+          date: record.date,
+          check_in: record.check_in,
+          check_out: record.check_out,
+          work_hours: record.work_hours,
+          status: record.status,
+          time_category: record.time_category
+        };
+        
+        if (record.status === 'Present') {
+          employee.presentDays++;
+          employee.totalHours += record.work_hours || 0;
+          
+          if (['On Time', 'On-time Check-in', 'Early Check-in'].includes(record.time_category)) {
+            employee.onTimeDays++;
+          } else if (['Late Check-in', 'Late'].includes(record.time_category)) {
+            employee.lateDays++;
+          }
+        } else {
+          employee.leaveDays++;
+        }
+      });
 
-    setLoading(false);
-    return { data: processedData, error: null };
+      const processedData = Array.from(employeeMap.values())
+        .sort((a, b) => a.name.localeCompare(b.name));
+
+      setLoading(false);
+      return { data: processedData, error: null };
+
+    } catch (err: any) {
+      const errorMsg = handleSupabaseError(err, 'Weekly Employee Data Loading');
+      setError(errorMsg);
+      setLoading(false);
+      return { data: [], error: errorMsg };
+    }
   }, [clearError]);
 
   // Get employee by code
