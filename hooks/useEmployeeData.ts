@@ -19,7 +19,7 @@ export const useEmployeeData = (): UseEmployeeDataReturn => {
     setError('');
   }, []);
 
-  // Load all active employees - FIXED VERSION
+  // Load all active employees - SIMPLE VERSION (No RPC needed)
   const loadEmployees = useCallback(async () => {
     setLoading(true);
     clearError();
@@ -27,22 +27,21 @@ export const useEmployeeData = (): UseEmployeeDataReturn => {
     try {
       console.log('🔍 Loading all unique employees...');
       
-      // Enhanced query with better error handling and logging
-      const { data, error: loadError } = await supabase
+      // Simple approach: Load ALL records without any limits
+      const { data: allRecords, error: loadError } = await supabase
         .from('daily_employee_records')
         .select('emp_code, name')
-        .order('emp_code')
-        .limit(1000); // Add a reasonable limit to prevent issues
+        .order('emp_code');
 
       if (loadError) throw loadError;
+      
+      console.log(`📊 Raw query returned ${allRecords?.length || 0} total records`);
 
-      console.log(`📊 Raw query returned ${data?.length || 0} records`);
-
-      // Remove duplicates efficiently using Map
+      // Use Map for efficient deduplication
       const uniqueEmployeesMap = new Map<string, { emp_code: string; name: string }>();
       
-      data?.forEach(emp => {
-        if (!uniqueEmployeesMap.has(emp.emp_code)) {
+      allRecords?.forEach(emp => {
+        if (emp.emp_code && emp.name && !uniqueEmployeesMap.has(emp.emp_code)) {
           uniqueEmployeesMap.set(emp.emp_code, {
             emp_code: emp.emp_code,
             name: emp.name
@@ -51,10 +50,11 @@ export const useEmployeeData = (): UseEmployeeDataReturn => {
       });
 
       const uniqueEmployees = Array.from(uniqueEmployeesMap.values())
-        .sort((a, b) => a.name.localeCompare(b.name)); // Sort by name for better UX
+        .sort((a, b) => a.name.localeCompare(b.name));
 
       console.log(`✅ Found ${uniqueEmployees.length} unique employees`);
-      console.log('📝 Sample employees:', uniqueEmployees.slice(0, 5).map(e => `${e.name} (${e.emp_code})`));
+      console.log('📝 First 5 employees:', uniqueEmployees.slice(0, 5).map(e => `${e.name} (${e.emp_code})`));
+      console.log('📝 Last 5 employees:', uniqueEmployees.slice(-5).map(e => `${e.name} (${e.emp_code})`));
       
       setEmployees(uniqueEmployees);
       setLoading(false);
