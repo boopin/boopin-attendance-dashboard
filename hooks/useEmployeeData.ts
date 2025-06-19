@@ -19,33 +19,49 @@ export const useEmployeeData = (): UseEmployeeDataReturn => {
     setError('');
   }, []);
 
-  // Load all active employees
+  // Load all active employees - FIXED VERSION
   const loadEmployees = useCallback(async () => {
     setLoading(true);
     clearError();
 
     try {
-      // Get unique employees from daily_employee_records
+      console.log('🔍 Loading all unique employees...');
+      
+      // Enhanced query with better error handling and logging
       const { data, error: loadError } = await supabase
         .from('daily_employee_records')
         .select('emp_code, name')
-        .order('emp_code');
+        .order('emp_code')
+        .limit(1000); // Add a reasonable limit to prevent issues
 
       if (loadError) throw loadError;
 
-      // Remove duplicates and create employee objects
-      const uniqueEmployees = Array.from(
-        new Map(data?.map(emp => [emp.emp_code, emp]) || []).values()
-      ).map(emp => ({
-        emp_code: emp.emp_code,
-        name: emp.name
-      }));
+      console.log(`📊 Raw query returned ${data?.length || 0} records`);
 
+      // Remove duplicates efficiently using Map
+      const uniqueEmployeesMap = new Map<string, { emp_code: string; name: string }>();
+      
+      data?.forEach(emp => {
+        if (!uniqueEmployeesMap.has(emp.emp_code)) {
+          uniqueEmployeesMap.set(emp.emp_code, {
+            emp_code: emp.emp_code,
+            name: emp.name
+          });
+        }
+      });
+
+      const uniqueEmployees = Array.from(uniqueEmployeesMap.values())
+        .sort((a, b) => a.name.localeCompare(b.name)); // Sort by name for better UX
+
+      console.log(`✅ Found ${uniqueEmployees.length} unique employees`);
+      console.log('📝 Sample employees:', uniqueEmployees.slice(0, 5).map(e => `${e.name} (${e.emp_code})`));
+      
       setEmployees(uniqueEmployees);
       setLoading(false);
       return { data: uniqueEmployees, error: null };
 
     } catch (err: any) {
+      console.error('❌ Error in loadEmployees:', err);
       const errorMsg = handleSupabaseError(err, 'Employee Loading');
       setError(errorMsg);
       setEmployees([]);
@@ -90,12 +106,14 @@ export const useEmployeeData = (): UseEmployeeDataReturn => {
     }
   }, [clearError]);
 
-  // Load monthly data for a specific employee
+  // Load monthly data for a specific employee - ENHANCED VERSION
   const loadEmployeeMonthlyData = useCallback(async (empCode: string, month: string) => {
     setLoading(true);
     clearError();
 
     try {
+      console.log(`🔍 Loading monthly data for employee ${empCode} in ${month}`);
+      
       const { startDate, endDate } = getMonthDateRange(month);
       
       const { data, error: loadError } = await supabase
@@ -108,11 +126,14 @@ export const useEmployeeData = (): UseEmployeeDataReturn => {
 
       if (loadError) throw loadError;
 
+      console.log(`✅ Found ${data?.length || 0} monthly records for employee ${empCode}`);
+
       setEmployeeRecords(data || []);
       setLoading(false);
       return { data: data || [], error: null };
 
     } catch (err: any) {
+      console.error('❌ Error in loadEmployeeMonthlyData:', err);
       const errorMsg = handleSupabaseError(err, 'Monthly Employee Data Loading');
       setError(errorMsg);
       setEmployeeRecords([]);
@@ -127,6 +148,8 @@ export const useEmployeeData = (): UseEmployeeDataReturn => {
     clearError();
 
     try {
+      console.log(`🔍 Loading weekly data from ${weekStart} to ${weekEnd}`);
+      
       const { data, error: loadError } = await supabase
         .from('daily_employee_records')
         .select('*')
@@ -136,6 +159,8 @@ export const useEmployeeData = (): UseEmployeeDataReturn => {
         .order('date');
 
       if (loadError) throw loadError;
+
+      console.log(`✅ Found ${data?.length || 0} weekly records`);
 
       // Process data into WeeklyEmployeeData format
       const employeeMap = new Map<string, any>();
@@ -187,10 +212,13 @@ export const useEmployeeData = (): UseEmployeeDataReturn => {
       const processedData = Array.from(employeeMap.values())
         .sort((a, b) => a.name.localeCompare(b.name));
 
+      console.log(`✅ Processed ${processedData.length} employees for weekly report`);
+
       setLoading(false);
       return { data: processedData, error: null };
 
     } catch (err: any) {
+      console.error('❌ Error in loadWeeklyEmployeeData:', err);
       const errorMsg = handleSupabaseError(err, 'Weekly Employee Data Loading');
       setError(errorMsg);
       setLoading(false);
