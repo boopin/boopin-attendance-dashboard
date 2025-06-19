@@ -19,7 +19,7 @@ export const useEmployeeData = (): UseEmployeeDataReturn => {
     setError('');
   }, []);
 
-  // Load all active employees - SIMPLE VERSION (No RPC needed)
+  // Load all active employees - DEBUG VERSION
   const loadEmployees = useCallback(async () => {
     setLoading(true);
     clearError();
@@ -27,34 +27,69 @@ export const useEmployeeData = (): UseEmployeeDataReturn => {
     try {
       console.log('🔍 Loading all unique employees...');
       
-      // Simple approach: Load ALL records without any limits
+      // Load ALL records without any limits
       const { data: allRecords, error: loadError } = await supabase
         .from('daily_employee_records')
-        .select('emp_code, name')
-        .order('emp_code');
+        .select('emp_code, name');
 
-      if (loadError) throw loadError;
+      if (loadError) {
+        console.error('❌ Supabase error:', loadError);
+        throw loadError;
+      }
       
       console.log(`📊 Raw query returned ${allRecords?.length || 0} total records`);
-
-      // Use Map for efficient deduplication
-      const uniqueEmployeesMap = new Map<string, { emp_code: string; name: string }>();
       
-      allRecords?.forEach(emp => {
-        if (emp.emp_code && emp.name && !uniqueEmployeesMap.has(emp.emp_code)) {
-          uniqueEmployeesMap.set(emp.emp_code, {
-            emp_code: emp.emp_code,
-            name: emp.name
-          });
+      // Debug: Log first few records to see what we're getting
+      console.log('🔬 First 10 raw records:', allRecords?.slice(0, 10));
+      
+      // Debug: Check for any null or empty values
+      const recordsWithIssues = allRecords?.filter(emp => 
+        !emp.emp_code || !emp.name || emp.emp_code.trim() === '' || emp.name.trim() === ''
+      );
+      console.log(`⚠️ Records with missing data: ${recordsWithIssues?.length || 0}`);
+      if (recordsWithIssues && recordsWithIssues.length > 0) {
+        console.log('🔬 Problem records:', recordsWithIssues.slice(0, 5));
+      }
+
+      // Use Map for efficient deduplication with detailed logging
+      const uniqueEmployeesMap = new Map<string, { emp_code: string; name: string }>();
+      let processedCount = 0;
+      let skippedCount = 0;
+      
+      allRecords?.forEach((emp, index) => {
+        processedCount++;
+        
+        // Log progress every 1000 records
+        if (processedCount % 1000 === 0) {
+          console.log(`📈 Processed ${processedCount} records, found ${uniqueEmployeesMap.size} unique employees so far`);
+        }
+        
+        if (emp.emp_code && emp.name && emp.emp_code.trim() && emp.name.trim()) {
+          if (!uniqueEmployeesMap.has(emp.emp_code)) {
+            uniqueEmployeesMap.set(emp.emp_code, {
+              emp_code: emp.emp_code,
+              name: emp.name
+            });
+          }
+        } else {
+          skippedCount++;
         }
       });
+
+      console.log(`📋 Processing complete: ${processedCount} total records, ${skippedCount} skipped`);
 
       const uniqueEmployees = Array.from(uniqueEmployeesMap.values())
         .sort((a, b) => a.name.localeCompare(b.name));
 
       console.log(`✅ Found ${uniqueEmployees.length} unique employees`);
-      console.log('📝 First 5 employees:', uniqueEmployees.slice(0, 5).map(e => `${e.name} (${e.emp_code})`));
-      console.log('📝 Last 5 employees:', uniqueEmployees.slice(-5).map(e => `${e.name} (${e.emp_code})`));
+      console.log('📝 All unique employee codes:', uniqueEmployees.map(e => e.emp_code).sort());
+      console.log('📝 First 10 employees:', uniqueEmployees.slice(0, 10).map(e => `${e.name} (${e.emp_code})`));
+      console.log('📝 Last 10 employees:', uniqueEmployees.slice(-10).map(e => `${e.name} (${e.emp_code})`));
+      
+      // Double-check: manually count unique emp_codes using Set
+      const uniqueEmpCodes = new Set(allRecords?.map(r => r.emp_code).filter(code => code && code.trim()));
+      console.log(`🔍 Double-check with Set: ${uniqueEmpCodes.size} unique emp_codes`);
+      console.log('🔍 Set contents:', Array.from(uniqueEmpCodes).sort());
       
       setEmployees(uniqueEmployees);
       setLoading(false);
