@@ -1,12 +1,12 @@
 // hooks/useEmployeeData.ts
-// 👥 Custom hook for managing employee data and records - FIXED VERSION
+// 👥 Custom hook for managing employee data and records - FIXED VERSION WITH PAGINATION
 
 import { useState, useCallback } from 'react';
 import type { Employee, EmployeeRecord, UseEmployeeDataReturn } from '../lib/types';
 import { handleSupabaseError } from '../lib/supabase';
 import { handleAsyncOperation, groupBy } from '../lib/utils';
 import { getMonthDateRange } from '../lib/formatters';
-import { supabase } from '../lib/supabase'; // Direct import
+import { supabase } from '../lib/supabase';
 
 export const useEmployeeData = (): UseEmployeeDataReturn => {
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -19,7 +19,7 @@ export const useEmployeeData = (): UseEmployeeDataReturn => {
     setError('');
   }, []);
 
-  // Load all active employees - DEBUG VERSION
+  // Load all active employees - FIXED VERSION WITH PAGINATION
   const loadEmployees = useCallback(async () => {
     setLoading(true);
     clearError();
@@ -27,42 +27,53 @@ export const useEmployeeData = (): UseEmployeeDataReturn => {
     try {
       console.log('🔍 Loading all unique employees...');
       
-      // Load ALL records without any limits
-      const { data: allRecords, error: loadError } = await supabase
-        .from('daily_employee_records')
-        .select('emp_code, name');
+      // Load ALL records using pagination to avoid 1000 record limit
+      let allRecords: any[] = [];
+      let rangeStart = 0;
+      const rangeSize = 1000;
+      let hasMore = true;
 
-      if (loadError) {
-        console.error('❌ Supabase error:', loadError);
-        throw loadError;
+      while (hasMore) {
+        const { data: batch, error: loadError } = await supabase
+          .from('daily_employee_records')
+          .select('emp_code, name')
+          .range(rangeStart, rangeStart + rangeSize - 1)
+          .order('emp_code');
+
+        if (loadError) {
+          console.error('❌ Supabase error:', loadError);
+          throw loadError;
+        }
+        
+        if (batch && batch.length > 0) {
+          allRecords = [...allRecords, ...batch];
+          rangeStart += rangeSize;
+          console.log(`📈 Loaded ${allRecords.length} records so far...`);
+          
+          // If we got less than the range size, we've reached the end
+          if (batch.length < rangeSize) {
+            hasMore = false;
+          }
+        } else {
+          hasMore = false;
+        }
       }
       
-      console.log(`📊 Raw query returned ${allRecords?.length || 0} total records`);
-      
-      // Debug: Log first few records to see what we're getting
-      console.log('🔬 First 10 raw records:', allRecords?.slice(0, 10));
+      console.log(`📊 Total records loaded: ${allRecords.length}`);
       
       // Debug: Check for any null or empty values
-      const recordsWithIssues = allRecords?.filter(emp => 
+      const recordsWithIssues = allRecords.filter(emp => 
         !emp.emp_code || !emp.name || emp.emp_code.trim() === '' || emp.name.trim() === ''
       );
-      console.log(`⚠️ Records with missing data: ${recordsWithIssues?.length || 0}`);
-      if (recordsWithIssues && recordsWithIssues.length > 0) {
-        console.log('🔬 Problem records:', recordsWithIssues.slice(0, 5));
-      }
+      console.log(`⚠️ Records with missing data: ${recordsWithIssues.length}`);
 
-      // Use Map for efficient deduplication with detailed logging
+      // Use Map for efficient deduplication
       const uniqueEmployeesMap = new Map<string, { emp_code: string; name: string }>();
       let processedCount = 0;
       let skippedCount = 0;
       
-      allRecords?.forEach((emp, index) => {
+      allRecords.forEach((emp) => {
         processedCount++;
-        
-        // Log progress every 1000 records
-        if (processedCount % 1000 === 0) {
-          console.log(`📈 Processed ${processedCount} records, found ${uniqueEmployeesMap.size} unique employees so far`);
-        }
         
         if (emp.emp_code && emp.name && emp.emp_code.trim() && emp.name.trim()) {
           if (!uniqueEmployeesMap.has(emp.emp_code)) {
@@ -83,13 +94,14 @@ export const useEmployeeData = (): UseEmployeeDataReturn => {
 
       console.log(`✅ Found ${uniqueEmployees.length} unique employees`);
       console.log('📝 All unique employee codes:', uniqueEmployees.map(e => e.emp_code).sort());
-      console.log('📝 First 10 employees:', uniqueEmployees.slice(0, 10).map(e => `${e.name} (${e.emp_code})`));
-      console.log('📝 Last 10 employees:', uniqueEmployees.slice(-10).map(e => `${e.name} (${e.emp_code})`));
       
-      // Double-check: manually count unique emp_codes using Set
-      const uniqueEmpCodes = new Set(allRecords?.map(r => r.emp_code).filter(code => code && code.trim()));
-      console.log(`🔍 Double-check with Set: ${uniqueEmpCodes.size} unique emp_codes`);
-      console.log('🔍 Set contents:', Array.from(uniqueEmpCodes).sort());
+      // Check specifically for employee 74
+      const hasEmployee74 = uniqueEmployees.some(e => e.emp_code === '74');
+      console.log(`🔍 Employee 74 (Christine) found: ${hasEmployee74}`);
+      if (hasEmployee74) {
+        const christine = uniqueEmployees.find(e => e.emp_code === '74');
+        console.log(`✅ Christine details: ${christine?.name} (Code: ${christine?.emp_code})`);
+      }
       
       setEmployees(uniqueEmployees);
       setLoading(false);
@@ -105,7 +117,7 @@ export const useEmployeeData = (): UseEmployeeDataReturn => {
     }
   }, [clearError]);
 
-  // Load employee records for a specific date - FIXED VERSION
+  // Load employee records for a specific date
   const loadEmployeeData = useCallback(async (date: string) => {
     setLoading(true);
     clearError();
@@ -113,7 +125,6 @@ export const useEmployeeData = (): UseEmployeeDataReturn => {
     try {
       console.log(`🔍 Loading employee records for date: ${date}`);
 
-      // Direct Supabase query - exactly what the test script showed works
       const { data, error: loadError } = await supabase
         .from('daily_employee_records')
         .select('emp_code, name, date, check_in, check_out, work_hours, time_category, status, total_punches')
@@ -141,7 +152,7 @@ export const useEmployeeData = (): UseEmployeeDataReturn => {
     }
   }, [clearError]);
 
-  // Load monthly data for a specific employee - ENHANCED VERSION
+  // Load monthly data for a specific employee
   const loadEmployeeMonthlyData = useCallback(async (empCode: string, month: string) => {
     setLoading(true);
     clearError();
