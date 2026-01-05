@@ -68,7 +68,7 @@ export const useEmployeeData = (): UseEmployeeDataReturn => {
       console.log(`⚠️ Records with missing data: ${recordsWithIssues.length}`);
 
       // Use Map for efficient deduplication - FIX: Force String conversion for consistent keys
-      const uniqueEmployeesMap = new Map<string, { emp_code: string; name: string }>();
+      const uniqueEmployeesMap = new Map<string, Employee>();
       let processedCount = 0;
       let skippedCount = 0;
       
@@ -83,7 +83,8 @@ export const useEmployeeData = (): UseEmployeeDataReturn => {
           if (!uniqueEmployeesMap.has(empCodeStr)) {
             uniqueEmployeesMap.set(empCodeStr, {
               emp_code: empCodeStr,
-              name: nameStr
+              name: nameStr,
+              is_active: true
             });
           }
         } else {
