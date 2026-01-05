@@ -1,5 +1,5 @@
 // hooks/useEmployeeData.ts
-// 👥 Custom hook for managing employee data and records - FIXED VERSION WITH PAGINATION
+// 👥 Custom hook for managing employee data and records - FIXED VERSION WITH TYPE COERCION
 
 import { useState, useCallback } from 'react';
 import type { Employee, EmployeeRecord, UseEmployeeDataReturn } from '../lib/types';
@@ -19,7 +19,7 @@ export const useEmployeeData = (): UseEmployeeDataReturn => {
     setError('');
   }, []);
 
-  // Load all active employees - FIXED VERSION WITH PAGINATION
+  // Load all active employees - FIXED VERSION WITH PAGINATION AND TYPE COERCION
   const loadEmployees = useCallback(async () => {
     setLoading(true);
     clearError();
@@ -63,11 +63,11 @@ export const useEmployeeData = (): UseEmployeeDataReturn => {
       
       // Debug: Check for any null or empty values
       const recordsWithIssues = allRecords.filter(emp => 
-        !emp.emp_code || !emp.name || emp.emp_code.trim() === '' || emp.name.trim() === ''
+        !emp.emp_code || !emp.name || String(emp.emp_code).trim() === '' || String(emp.name).trim() === ''
       );
       console.log(`⚠️ Records with missing data: ${recordsWithIssues.length}`);
 
-      // Use Map for efficient deduplication
+      // Use Map for efficient deduplication - FIX: Force String conversion for consistent keys
       const uniqueEmployeesMap = new Map<string, { emp_code: string; name: string }>();
       let processedCount = 0;
       let skippedCount = 0;
@@ -75,15 +75,20 @@ export const useEmployeeData = (): UseEmployeeDataReturn => {
       allRecords.forEach((emp) => {
         processedCount++;
         
-        if (emp.emp_code && emp.name && emp.emp_code.trim() && emp.name.trim()) {
-          if (!uniqueEmployeesMap.has(emp.emp_code)) {
-            uniqueEmployeesMap.set(emp.emp_code, {
-              emp_code: emp.emp_code,
-              name: emp.name
+        // FIX: Convert emp_code to string for consistent handling
+        const empCodeStr = String(emp.emp_code || '').trim();
+        const nameStr = String(emp.name || '').trim();
+        
+        if (empCodeStr && nameStr) {
+          if (!uniqueEmployeesMap.has(empCodeStr)) {
+            uniqueEmployeesMap.set(empCodeStr, {
+              emp_code: empCodeStr,
+              name: nameStr
             });
           }
         } else {
           skippedCount++;
+          console.log(`⚠️ Skipped record: emp_code="${emp.emp_code}" (type: ${typeof emp.emp_code}), name="${emp.name}"`);
         }
       });
 
@@ -93,14 +98,28 @@ export const useEmployeeData = (): UseEmployeeDataReturn => {
         .sort((a, b) => a.name.localeCompare(b.name));
 
       console.log(`✅ Found ${uniqueEmployees.length} unique employees`);
-      console.log('📝 All unique employee codes:', uniqueEmployees.map(e => e.emp_code).sort());
+      console.log('📝 All unique employee codes:', uniqueEmployees.map(e => e.emp_code).sort((a, b) => {
+        // Sort numerically if possible
+        const numA = parseInt(a, 10);
+        const numB = parseInt(b, 10);
+        if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
+        return a.localeCompare(b);
+      }));
       
-      // Check specifically for employee 74
-      const hasEmployee74 = uniqueEmployees.some(e => e.emp_code === '74');
-      console.log(`🔍 Employee 74 (Christine) found: ${hasEmployee74}`);
-      if (hasEmployee74) {
-        const christine = uniqueEmployees.find(e => e.emp_code === '74');
-        console.log(`✅ Christine details: ${christine?.name} (Code: ${christine?.emp_code})`);
+      // Check specifically for employee 14 (Randa)
+      const hasEmployee14 = uniqueEmployees.some(e => e.emp_code === '14');
+      console.log(`🔍 Employee 14 (Randa) found: ${hasEmployee14}`);
+      if (hasEmployee14) {
+        const randa = uniqueEmployees.find(e => e.emp_code === '14');
+        console.log(`✅ Randa details: ${randa?.name} (Code: ${randa?.emp_code})`);
+      } else {
+        // Additional debug: check if 14 exists as a number
+        const hasNumeric14 = allRecords.some(r => r.emp_code === 14 || r.emp_code === '14');
+        console.log(`🔍 Raw records contain emp_code 14: ${hasNumeric14}`);
+        if (hasNumeric14) {
+          const sample = allRecords.find(r => r.emp_code === 14 || r.emp_code === '14');
+          console.log(`📋 Sample record for 14:`, sample, `Type: ${typeof sample?.emp_code}`);
+        }
       }
       
       setEmployees(uniqueEmployees);
@@ -138,9 +157,16 @@ export const useEmployeeData = (): UseEmployeeDataReturn => {
 
       console.log(`✅ Found ${data?.length || 0} employee records for ${date}`);
 
-      setEmployeeRecords(data || []);
+      // FIX: Normalize emp_code to string in all records
+      const normalizedData = (data || []).map(record => ({
+        ...record,
+        emp_code: String(record.emp_code || '').trim(),
+        name: String(record.name || '').trim()
+      }));
+
+      setEmployeeRecords(normalizedData);
       setLoading(false);
-      return { data: data || [], error: null };
+      return { data: normalizedData, error: null };
 
     } catch (err: any) {
       console.error('❌ Error in loadEmployeeData:', err);
@@ -158,25 +184,35 @@ export const useEmployeeData = (): UseEmployeeDataReturn => {
     clearError();
 
     try {
-      console.log(`🔍 Loading monthly data for employee ${empCode} in ${month}`);
+      // FIX: Ensure empCode is a string for consistent querying
+      const empCodeStr = String(empCode).trim();
+      console.log(`🔍 Loading monthly data for employee ${empCodeStr} in ${month}`);
       
       const { startDate, endDate } = getMonthDateRange(month);
       
+      // FIX: Try both string and numeric versions of emp_code
       const { data, error: loadError } = await supabase
         .from('daily_employee_records')
         .select('*')
-        .eq('emp_code', empCode)
+        .or(`emp_code.eq.${empCodeStr},emp_code.eq.${parseInt(empCodeStr, 10) || empCodeStr}`)
         .gte('date', startDate)
         .lte('date', endDate)
         .order('date', { ascending: true });
 
       if (loadError) throw loadError;
 
-      console.log(`✅ Found ${data?.length || 0} monthly records for employee ${empCode}`);
+      console.log(`✅ Found ${data?.length || 0} monthly records for employee ${empCodeStr}`);
 
-      setEmployeeRecords(data || []);
+      // FIX: Normalize emp_code to string in all records
+      const normalizedData = (data || []).map(record => ({
+        ...record,
+        emp_code: String(record.emp_code || '').trim(),
+        name: String(record.name || '').trim()
+      }));
+
+      setEmployeeRecords(normalizedData);
       setLoading(false);
-      return { data: data || [], error: null };
+      return { data: normalizedData, error: null };
 
     } catch (err: any) {
       console.error('❌ Error in loadEmployeeMonthlyData:', err);
@@ -208,14 +244,20 @@ export const useEmployeeData = (): UseEmployeeDataReturn => {
 
       console.log(`✅ Found ${data?.length || 0} weekly records`);
 
-      // Process data into WeeklyEmployeeData format
+      // Process data into WeeklyEmployeeData format - FIX: Use string keys consistently
       const employeeMap = new Map<string, any>();
       
       data?.forEach(record => {
-        if (!employeeMap.has(record.emp_code)) {
-          employeeMap.set(record.emp_code, {
-            emp_code: record.emp_code,
-            name: record.name,
+        // FIX: Convert emp_code to string for consistent Map keys
+        const empCodeStr = String(record.emp_code || '').trim();
+        const nameStr = String(record.name || '').trim();
+        
+        if (!empCodeStr) return; // Skip records without emp_code
+        
+        if (!employeeMap.has(empCodeStr)) {
+          employeeMap.set(empCodeStr, {
+            emp_code: empCodeStr,
+            name: nameStr,
             days: [],
             totalDays: 0,
             presentDays: 0,
@@ -227,7 +269,7 @@ export const useEmployeeData = (): UseEmployeeDataReturn => {
           });
         }
 
-        const employee = employeeMap.get(record.emp_code)!;
+        const employee = employeeMap.get(empCodeStr)!;
         employee.days.push(record);
         employee.totalDays++;
         
@@ -272,14 +314,16 @@ export const useEmployeeData = (): UseEmployeeDataReturn => {
     }
   }, [clearError]);
 
-  // Get employee by code
+  // Get employee by code - FIX: Handle both string and number comparisons
   const getEmployeeByCode = useCallback((empCode: string): Employee | null => {
-    return employees.find(emp => emp.emp_code === empCode) || null;
+    const empCodeStr = String(empCode).trim();
+    return employees.find(emp => String(emp.emp_code).trim() === empCodeStr) || null;
   }, [employees]);
 
-  // Get employee name by code
+  // Get employee name by code - FIX: Handle both string and number comparisons
   const getEmployeeName = useCallback((empCode: string): string => {
-    const employee = employees.find(emp => emp.emp_code === empCode);
+    const empCodeStr = String(empCode).trim();
+    const employee = employees.find(emp => String(emp.emp_code).trim() === empCodeStr);
     return employee?.name || empCode;
   }, [employees]);
 
