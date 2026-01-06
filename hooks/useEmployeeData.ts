@@ -19,7 +19,7 @@ export const useEmployeeData = (): UseEmployeeDataReturn => {
     setError('');
   }, []);
 
-  // Load all active employees - FIXED VERSION WITH PAGINATION AND TYPE COERCION
+  // Load all active employees - FIXED VERSION WITH PAGINATION AND MOST RECENT NAME
   const loadEmployees = useCallback(async () => {
     setLoading(true);
     clearError();
@@ -28,6 +28,7 @@ export const useEmployeeData = (): UseEmployeeDataReturn => {
       console.log('🔍 Loading all unique employees...');
       
       // Load ALL records using pagination to avoid 1000 record limit
+      // Order by date DESC to get most recent records first
       let allRecords: any[] = [];
       let rangeStart = 0;
       const rangeSize = 1000;
@@ -36,9 +37,9 @@ export const useEmployeeData = (): UseEmployeeDataReturn => {
       while (hasMore) {
         const { data: batch, error: loadError } = await supabase
           .from('daily_employee_records')
-          .select('emp_code, name')
+          .select('emp_code, name, date')
           .range(rangeStart, rangeStart + rangeSize - 1)
-          .order('emp_code');
+          .order('date', { ascending: false });  // Most recent first
 
         if (loadError) {
           console.error('❌ Supabase error:', loadError);
@@ -67,7 +68,7 @@ export const useEmployeeData = (): UseEmployeeDataReturn => {
       );
       console.log(`⚠️ Records with missing data: ${recordsWithIssues.length}`);
 
-      // Use Map for efficient deduplication - FIX: Force String conversion for consistent keys
+      // Use Map for efficient deduplication - FIX: Use most recent name (first encountered since sorted by date DESC)
       const uniqueEmployeesMap = new Map<string, Employee>();
       let processedCount = 0;
       let skippedCount = 0;
@@ -80,12 +81,14 @@ export const useEmployeeData = (): UseEmployeeDataReturn => {
         const nameStr = String(emp.name || '').trim();
         
         if (empCodeStr && nameStr) {
+          // Only set if not already in map (first = most recent due to date DESC ordering)
           if (!uniqueEmployeesMap.has(empCodeStr)) {
             uniqueEmployeesMap.set(empCodeStr, {
               emp_code: empCodeStr,
               name: nameStr,
               is_active: true
             });
+            console.log(`✅ Added employee: ${nameStr} (Code: ${empCodeStr})`);
           }
         } else {
           skippedCount++;
